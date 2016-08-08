@@ -112,13 +112,13 @@ proc ::tclapp::xilinx::incrcompile::enable_auto_incremental_compile { args } {
   # sainath reddy
   #-------------------------------------------------------
   set ::tclapp::xilinx::incrcompile::autoIncrCompileScheme $schemeName
-  puts "AutoIncrementalCompile: Enabled with scheme $::tclapp::xilinx::incrcompile::autoIncrCompileScheme " 
   if {![isResetRunSwappedWithIncr]} {
     swapResetRunWithIncrResetRun
   }
   if {![isLaunchRunsSwappedWithIncr]} {
     swapLaunchRunsWithIncrLaunchRuns
   }
+  puts "AutoIncrementalCompile: Enabled with scheme $::tclapp::xilinx::incrcompile::autoIncrCompileScheme " 
 }
 
 # pre-condition: assumes the convention impl_dir/top_routed.dcp
