@@ -84,7 +84,6 @@ proc ::tclapp::xilinx::incrcompile::swapIncrLaunchRunsWithLaunchRuns {} {
   # Argument Usage :
   # Return Value :
 
-  #puts "swapIncrLaunchRunsWithLaunchRuns()"
   variable ::tclapp::xilinx::incrcompile::swapRuns
 	uplevel 2 rename ::launch_runs 				::tclapp::xilinx::incrcompile::incr_launch_runs 
 	uplevel 2 rename ::_real_launch_runs 	::launch_runs 
@@ -96,7 +95,6 @@ proc ::tclapp::xilinx::incrcompile::swapIncrResetRunWithResetRun {} {
   # Argument Usage:
   # Return Value:
 
-  #puts "swapIncrResetRunWithResetRun()"
   variable ::tclapp::xilinx::incrcompile::swapResetRun
   uplevel 2 rename ::reset_run 				::tclapp::xilinx::incrcompile::incr_reset_run
   uplevel 2 rename ::_real_reset_run 	::reset_run 
