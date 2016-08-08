@@ -8,7 +8,7 @@ proc ::tclapp::xilinx::incrcompile::enable_auto_incremental_compile { args } {
   # Summary : Enables the auto detection and enablement of incremental flow. 
 
   # Argument Usage:
-  # [-fixed <arg>]: <arg> run's routed (or placed) checkpoint  will be used a reference checkpoint for subsequent incremental runs
+  # [-fixed <arg>]: <arg> run's routed (or placed) checkpoint will be used a reference checkpoint for subsequent incremental runs
   # [-lastRun]: last modified run's routed (or placed) checkpoint  will be used a reference checkpoint for subsequent incremental runs
   # [-bestWNS]: best WNS runs's routed (or placed) checkpoint will be used as reference checkpoint for subsequent incremental runs
   # [-bestTNS]: best TNS run's routed (or placed) checkpoint will be used as reference checkpoint for subsequent incremental runs 
@@ -96,7 +96,7 @@ proc ::tclapp::xilinx::incrcompile::enable_auto_incremental_compile { args } {
      	::xilinx::incrcompile::enable_auto_incremental_compile -bestTNS
 
   Also See:
-			::xilinx::incrcompile::disable_auto_incremental_compile
+        ::xilinx::incrcompile::disable_auto_incremental_compile
 	
 } ]
     # HELP -->
@@ -107,12 +107,15 @@ proc ::tclapp::xilinx::incrcompile::enable_auto_incremental_compile { args } {
   }
 
 
-# if help or err should return before this
+  # if help or err should return before this
   #-------------------------------------------------------
   # sainath reddy
   #-------------------------------------------------------
   set ::tclapp::xilinx::incrcompile::autoIncrCompileScheme $schemeName
   puts "AutoIncrementalCompile: Enabled with scheme $::tclapp::xilinx::incrcompile::autoIncrCompileScheme " 
+  if {![isResetRunSwappedWithIncr]} {
+    swapResetRunWithIncrResetRun
+  }
   if {![isLaunchRunsSwappedWithIncr]} {
     swapLaunchRunsWithIncrLaunchRuns
   }
@@ -125,19 +128,47 @@ proc ::tclapp::xilinx::incrcompile::get_placed_or_routed_dcp { run } {
   # Return Value :
 
   set dcpFile ""
-  set is_impl_run [ get_property  IS_IMPLEMENTATION $run ] 
-
+  set is_impl_run [ get_property IS_IMPLEMENTATION $run ] 
   if {!$is_impl_run} {
   	return $dcpFile
   }
-  #set top 			[ get_property TOP [ get_designs $run] ]
-  set impl_dir 	[ get_property DIRECTORY $run ]
+
+  set impl_dir [ get_property DIRECTORY $run ]
   
   if {[::tclapp::xilinx::incrcompile::is_run_routed $run]} {
   	set dcpFile [ glob -directory $impl_dir *_routed.dcp ]
+    puts "dcpFile = $dcpFile"
   } elseif {[::tclapp::xilinx::incrcompile::is_run_placed_but_not_routed $run]} {
   	set dcpFile [glob -directory $impl_dir *_placed.dcp ]
-  }
+    puts "dcpFile = $dcpFile"
+  } 
+  
+    set impl_dir_cdUp "$impl_dir/../"
+    if {[string length $dcpFile] != 0} {
+        set dcpFileName [file tail $dcpFile]
+        set dcpFileTarget "${impl_dir_cdUp}${dcpFileName}"
+        if {[catch {file copy -force $dcpFile $dcpFileTarget}]} {
+            puts "AutoIncrementalCompile: Could not create copy of guide file: Source = $dcpFile, Destination = $dcpFileTarget."
+        } else {
+            puts "AutoIncrementalCompile: Successfully created a copy of the required guide file: Source = $dcpFile, Destination = $dcpFileTarget."
+        }
+        set dcpFile $dcpFileTarget
+    } else {
+        # When the user resets the run in the GUI, the latest dcp will be removed and we will get in here.
+        # However, we might still have a dcp which we've copied to the .runs directory previously that we can use.         
+        # Check if it exists and if so reuse it:
+        set top [ get_property TOP [current_fileset] ]
+        set dcpFileTarget "${impl_dir_cdUp}${top}_routed.dcp"
+        if {[file exists $dcpFileTarget] == 0} {
+            set dcpFileTarget "${impl_dir_cdUp}${top}_placed.dcp"
+        }
+        
+        if {[file exists $dcpFileTarget]} {
+            set dcpFile $dcpFileTarget
+            puts "AutoIncrementalCompile: Reusing previously copied guide file: $dcpFileTarget."
+        }
+    }
+
 	return $dcpFile
 }
 
@@ -154,78 +185,79 @@ proc ::tclapp::xilinx::incrcompile::isLaunchRunsSwappedWithIncr {} {
   }
 }
 
+proc ::tclapp::xilinx::incrcompile::isResetRunSwappedWithIncr {} {
+  # Summary :
+  # Argument Usage :
+  # Return Value :
+
+  variable ::tclapp::xilinx::incrcompile swapResetRun
+  if {![info exists ::tclapp::xilinx::incrcompile::swapResetRun] || $::tclapp::xilinx::incrcompile::swapResetRun==0} {
+    return 0
+  } else {
+    return 1
+  }
+}
+
 proc ::tclapp::xilinx::incrcompile::swapLaunchRunsWithIncrLaunchRuns {} {
   # Summary :
   # Argument Usage:
   # Return Value:
 
+  #puts "swapLaunchRunsWithIncrLaunchRuns()"
   variable ::tclapp::xilinx::incrcompile ::tclapp::xilinx::incrcompile::swapRuns
 	uplevel 2 rename ::launch_runs 			::_real_launch_runs
 	uplevel 2 rename ::tclapp::xilinx::incrcompile::incr_launch_runs ::launch_runs
   set ::tclapp::xilinx::incrcompile::swapRuns 1
+}
+
+proc ::tclapp::xilinx::incrcompile::swapResetRunWithIncrResetRun {} {
+  # Summary :
+  # Argument Usage:
+  # Return Value:
+
+  #puts "swapResetRunWithIncrResetRun()"
+  variable ::tclapp::xilinx::incrcompile ::tclapp::xilinx::incrcompile::swapResetRun
+	uplevel 2 rename ::reset_run 			::_real_reset_run
+	uplevel 2 rename ::tclapp::xilinx::incrcompile::incr_reset_run ::reset_run
+  set ::tclapp::xilinx::incrcompile::swapResetRun 1
 }
 				
 proc ::tclapp::xilinx::incrcompile::incr_launch_runs { args } {
   # Summary :
   # Argument Usage:
   # Return Value:
-
-  set orig_args $args
-	# takes all arguments of launch_runs
-	# parse args to filter out args with switches
-	# remaining args are of runs ; set INCREMENTAL_CHECKPOINT property for those runs
-	# real_launch_runs with modified INCREMENTAL_CHECKPOINT properties for applicable runs
-
-
-  while {[llength $args]} {
-    set name [::tclapp::xilinx::incrcompile::lshift args]
-		# launch_runs  [-jobs <arg>] [-scripts_only] [-lsf <arg>] [-sge <arg>]
-     #        [-dir <arg>] [-to_step <arg>] [-next_step] [-host <args>]
-     #        [-remote_cmd <arg>] [-email_to <args>] [-email_all]
-     #        [-pre_launch_script <arg>] [-post_launch_script <arg>] [-force]
-     #        [-quiet] [-verbose] <runs>...
-
-    switch $name {
-      -jobs -
-      -lsf -
-      -sge -
-      -dir -
-      -to_step -
-      -host -
-      -remote_cmd -
-      -email_to -
-      -pre_launch_script -
-      -post_launch_script { ::tclapp::xilinx::incrcompile::lshift args; }
-			-scripts_only -
-      -next_step -
-      -email_all -
-      -force -
-      -quiet -
-      -help  -
-      -verbose { }
-		default {
-      ::tclapp::xilinx::incrcompile::configure_incr_flow $name 
-      }
-    }
-		# processing all args ends
-   }
-  eval ::_real_launch_runs $orig_args 
+  
+  puts "AutoIncrementalCompile: Using incremental launch_runs overloaded proc..."
+  # When reset_run is launched on either the synth or impl runs, it will both clear the impl directory and we will lose any routed.dcp we require as the guide file:
+  ::tclapp::xilinx::incrcompile::configure_incr_flow 
+  eval ::_real_launch_runs $args 
 }
 
-proc ::tclapp::xilinx::incrcompile::configure_incr_flow { run_name } {
+				
+proc ::tclapp::xilinx::incrcompile::incr_reset_run { args } {
   # Summary :
   # Argument Usage:
   # Return Value:
+  
+  puts "AutoIncrementalCompile: Using incremental reset_run overloaded proc..."
+  # When reset_run is launched on either the synth or impl runs, it will both clear the impl directory and we will lose any routed.dcp we require as the guide file:
+  ::tclapp::xilinx::incrcompile::configure_incr_flow 
+  
+  eval ::_real_reset_run $args 
+}
 
+proc ::tclapp::xilinx::incrcompile::configure_incr_flow {}  {
+  # Summary :
+  # Argument Usage:
+  # Return Value:
+  
   variable ::tclapp::xilinx::incrcompile autoIncrCompileScheme 
   variable ::tclapp::xilinx::incrcompile autoIncrCompileScheme_RunName
 
-  set run [get_runs $run_name ]
+	set all_impl_runs [get_runs -filter IS_IMPLEMENTATION]
+	set all_impl_runs_placed_or_routed [get_impl_runs_placed_or_routed $all_impl_runs]
 
-	set all_impl_runs 									[get_runs -filter IS_IMPLEMENTATION]
-	set all_impl_runs_placed_or_routed 	[get_impl_runs_placed_or_routed $all_impl_runs]
-
-  puts "AutoIncrementalCompile: Scheme Enabled: $::tclapp::xilinx::incrcompile::autoIncrCompileScheme "
+    puts "AutoIncrementalCompile: Scheme Enabled: $::tclapp::xilinx::incrcompile::autoIncrCompileScheme "
 	switch $::tclapp::xilinx::incrcompile::autoIncrCompileScheme {
 	LastRun {
 	  set refRun [ lindex [ lsort -command compare_runs_dcp_time $all_impl_runs_placed_or_routed ] 0 ]
@@ -240,15 +272,21 @@ proc ::tclapp::xilinx::incrcompile::configure_incr_flow { run_name } {
 	  set refRun [ lindex [ lsort -command compare_runs_tns $all_impl_runs_placed_or_routed ] 0 ]
   } 	 
   }
+
 	# set the guide file if it exists
 	set guideFile [ ::tclapp::xilinx::incrcompile::get_placed_or_routed_dcp $refRun ]
 	if {![ file exists $guideFile]} {
-		puts "AutoIncrementalCompile: Incremental Flow not enabled as $guideFile for scheme $::tclapp::xilinx::incrcompile::autoIncrCompileScheme does not exist"
+        if {[string length $guideFile] == 0} {
+            puts "AutoIncrementalCompile: Incremental Flow not enabled as no guide file exists for scheme $::tclapp::xilinx::incrcompile::autoIncrCompileScheme. Resetting property INCREMENTAL_CHECKPOINT on current implementation run $refRun."
+        } else {
+            puts "AutoIncrementalCompile: Incremental Flow not enabled as $guideFile for scheme $::tclapp::xilinx::incrcompile::autoIncrCompileScheme does not exist. Resetting property INCREMENTAL_CHECKPOINT on current implementation run $refRun."
+        }
+        reset_property INCREMENTAL_CHECKPOINT $refRun
 		return;
-		} else {
-			puts "AutoIncrementalCompile: Incremental Flow enabled for $run with $refRun 's  $guideFile as the reference checkpoint"
-			set_property INCREMENTAL_CHECKPOINT $guideFile $run
-		}
+    } else {
+        puts "AutoIncrementalCompile: Incremental Flow enabled for $refRun with guide file ($guideFile) as the reference checkpoint."
+        set_property INCREMENTAL_CHECKPOINT $guideFile $refRun
+    }
 }
 
 proc ::tclapp::xilinx::incrcompile::get_impl_runs_placed_or_routed { impl_runs } {
@@ -256,7 +294,7 @@ proc ::tclapp::xilinx::incrcompile::get_impl_runs_placed_or_routed { impl_runs }
   # Argument Usage:
   # Return Value:
 
-	set runs_placed_or_routed [ list  ]
+	set runs_placed_or_routed [ list $impl_runs ]
 	foreach run $impl_runs {
 			if {[::tclapp::xilinx::incrcompile::is_run_routed $run] || [::tclapp::xilinx::incrcompile::is_run_placed_but_not_routed $run] } { 
 				lappend runs_placed_or_routed $run

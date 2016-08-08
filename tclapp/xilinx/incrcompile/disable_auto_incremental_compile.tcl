@@ -66,7 +66,9 @@ proc ::tclapp::xilinx::incrcompile::disable_auto_incremental_compile { args } {
   # sainath reddy
   #-------------------------------------------------------
   if {[isLaunchRunsSwappedWithIncr]} {
+    swapIncrResetRunWithResetRun
     swapIncrLaunchRunsWithLaunchRuns
+    
     variable ::tclapp::xilinx::incrcompile::autoIncrCompileScheme 
     variable ::tclapp::xilinx::incrcompile::autoIncrCompileScheme_RunName
     puts "AutoIncrementalCompile: Disabled " 
@@ -82,9 +84,22 @@ proc ::tclapp::xilinx::incrcompile::swapIncrLaunchRunsWithLaunchRuns {} {
   # Argument Usage :
   # Return Value :
 
+  puts "swapIncrLaunchRunsWithLaunchRuns()"
   variable ::tclapp::xilinx::incrcompile::swapRuns
 	uplevel 2 rename ::launch_runs 				::tclapp::xilinx::incrcompile::incr_launch_runs 
 	uplevel 2 rename ::_real_launch_runs 	::launch_runs 
   set ::tclapp::xilinx::incrcompile::swapRuns 0
+}
+
+proc ::tclapp::xilinx::incrcompile::swapIncrResetRunWithResetRun {} {
+  # Summary :
+  # Argument Usage:
+  # Return Value:
+
+  puts "swapIncrResetRunWithResetRun()"
+  variable ::tclapp::xilinx::incrcompile::swapResetRun
+  uplevel 2 rename ::reset_run 				::tclapp::xilinx::incrcompile::incr_reset_run
+  uplevel 2 rename ::_real_reset_run 	::reset_run 
+  set ::tclapp::xilinx::incrcompile::swapResetRun 0
 }
 
