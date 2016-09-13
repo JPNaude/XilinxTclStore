@@ -112,13 +112,13 @@ proc ::tclapp::xilinx::incrcompile::enable_auto_incremental_compile { args } {
   # sainath reddy
   #-------------------------------------------------------
   set ::tclapp::xilinx::incrcompile::autoIncrCompileScheme $schemeName
+  puts "AutoIncrementalCompile: Enabled with scheme $::tclapp::xilinx::incrcompile::autoIncrCompileScheme " 
   if {![isResetRunSwappedWithIncr]} {
     swapResetRunWithIncrResetRun
   }
   if {![isLaunchRunsSwappedWithIncr]} {
     swapLaunchRunsWithIncrLaunchRuns
   }
-  puts "AutoIncrementalCompile: Enabled with scheme $::tclapp::xilinx::incrcompile::autoIncrCompileScheme " 
 }
 
 # pre-condition: assumes the convention impl_dir/top_routed.dcp
@@ -128,21 +128,23 @@ proc ::tclapp::xilinx::incrcompile::get_placed_or_routed_dcp { run } {
   # Return Value :
 
   set dcpFile ""
-  set is_impl_run [ get_property IS_IMPLEMENTATION $run ] 
-  if {!$is_impl_run} {
-  	return $dcpFile
+  set impl_dir ""
+  set is_impl_run false
+  if {[string length $run] != 0} {
+    set is_impl_run [ get_property IS_IMPLEMENTATION $run ] 
+    set impl_dir [ get_property DIRECTORY $run ]
   }
 
-  set impl_dir [ get_property DIRECTORY $run ]
-  
-  if {[::tclapp::xilinx::incrcompile::is_run_routed $run]} {
-  	set dcpFile [ glob -directory $impl_dir *_routed.dcp ]
-    puts "dcpFile = $dcpFile"
-  } elseif {[::tclapp::xilinx::incrcompile::is_run_placed_but_not_routed $run]} {
-  	set dcpFile [glob -directory $impl_dir *_placed.dcp ]
-    puts "dcpFile = $dcpFile"
-  } 
-  
+  if {[string length $run] != 0} {
+      if {[::tclapp::xilinx::incrcompile::is_run_routed $run]} {
+        set dcpFile [ glob -directory $impl_dir *_routed.dcp ]
+        puts "dcpFile = $dcpFile"
+      } elseif {[::tclapp::xilinx::incrcompile::is_run_placed_but_not_routed $run]} {
+        set dcpFile [glob -directory $impl_dir *_placed.dcp ]
+        puts "dcpFile = $dcpFile"
+      } 
+  }  
+
     set impl_dir_cdUp "$impl_dir/../"
     if {[string length $dcpFile] != 0} {
         set dcpFileName [file tail $dcpFile]
@@ -154,10 +156,14 @@ proc ::tclapp::xilinx::incrcompile::get_placed_or_routed_dcp { run } {
         }
         set dcpFile $dcpFileTarget
     } else {
+        puts "AutoIncrementalCompile: No lastRun implementation with up to date results available. Checking if previously copied guide file is available..."
         # When the user resets the run in the GUI, the latest dcp will be removed and we will get in here.
         # However, we might still have a dcp which we've copied to the .runs directory previously that we can use.         
         # Check if it exists and if so reuse it:
         set top [ get_property TOP [current_fileset] ]
+        set impl_dir [ get_property DIRECTORY [current_run] ]
+        set impl_dir_cdUp "${impl_dir}/../"
+        
         set dcpFileTarget "${impl_dir_cdUp}${top}_routed.dcp"
         if {[file exists $dcpFileTarget] == 0} {
             set dcpFileTarget "${impl_dir_cdUp}${top}_placed.dcp"
@@ -250,42 +256,41 @@ proc ::tclapp::xilinx::incrcompile::configure_incr_flow {}  {
   # Summary :
   # Argument Usage:
   # Return Value:
+    variable ::tclapp::xilinx::incrcompile autoIncrCompileScheme 
+    variable ::tclapp::xilinx::incrcompile autoIncrCompileScheme_RunName
   
-  variable ::tclapp::xilinx::incrcompile autoIncrCompileScheme 
-  variable ::tclapp::xilinx::incrcompile autoIncrCompileScheme_RunName
-
 	set all_impl_runs [get_runs -filter IS_IMPLEMENTATION]
 	set all_impl_runs_placed_or_routed [get_impl_runs_placed_or_routed $all_impl_runs]
 
     puts "AutoIncrementalCompile: Scheme Enabled: $::tclapp::xilinx::incrcompile::autoIncrCompileScheme "
 	switch $::tclapp::xilinx::incrcompile::autoIncrCompileScheme {
-	LastRun {
-	  set refRun [ lindex [ lsort -command compare_runs_dcp_time $all_impl_runs_placed_or_routed ] 0 ]
-  } 	 
-	Fixed {
-	   set refRun [ get_runs $::tclapp::xilinx::incrcompile::autoIncrCompileScheme_RunName ]  
-  } 	 
-  BestWNS {
-		 set refRun [ lindex [ lsort -command compare_runs_wns $all_impl_runs_placed_or_routed ] 0 ]
-  } 	 
-	BestTNS {
-	  set refRun [ lindex [ lsort -command compare_runs_tns $all_impl_runs_placed_or_routed ] 0 ]
-  } 	 
-  }
+        LastRun {
+            set refRun [ lindex [ lsort -command compare_runs_dcp_time $all_impl_runs_placed_or_routed ] 0 ]
+        } 	 
+        Fixed {
+            set refRun [ get_runs $::tclapp::xilinx::incrcompile::autoIncrCompileScheme_RunName ]  
+        } 	 
+        BestWNS {
+            set refRun [ lindex [ lsort -command compare_runs_wns $all_impl_runs_placed_or_routed ] 0 ]
+        } 	 
+        BestTNS {
+             set refRun [ lindex [ lsort -command compare_runs_tns $all_impl_runs_placed_or_routed ] 0 ]
+        } 	 
+    }
 
 	# set the guide file if it exists
 	set guideFile [ ::tclapp::xilinx::incrcompile::get_placed_or_routed_dcp $refRun ]
 	if {![ file exists $guideFile]} {
         if {[string length $guideFile] == 0} {
-            puts "AutoIncrementalCompile: Incremental Flow not enabled as no guide file exists for scheme $::tclapp::xilinx::incrcompile::autoIncrCompileScheme. Resetting property INCREMENTAL_CHECKPOINT on current implementation run $refRun."
+            puts "AutoIncrementalCompile: Incremental Flow not enabled as no guide file exists for scheme $::tclapp::xilinx::incrcompile::autoIncrCompileScheme. Resetting property INCREMENTAL_CHECKPOINT on current implementation run."
         } else {
-            puts "AutoIncrementalCompile: Incremental Flow not enabled as $guideFile for scheme $::tclapp::xilinx::incrcompile::autoIncrCompileScheme does not exist. Resetting property INCREMENTAL_CHECKPOINT on current implementation run $refRun."
+            puts "AutoIncrementalCompile: Incremental Flow not enabled as $guideFile for scheme $::tclapp::xilinx::incrcompile::autoIncrCompileScheme does not exist. Resetting property INCREMENTAL_CHECKPOINT on current implementation run."
         }
-        reset_property INCREMENTAL_CHECKPOINT $refRun
+        reset_property INCREMENTAL_CHECKPOINT [current_run]
 		return;
     } else {
-        puts "AutoIncrementalCompile: Incremental Flow enabled for $refRun with guide file ($guideFile) as the reference checkpoint."
-        set_property INCREMENTAL_CHECKPOINT $guideFile $refRun
+        puts "AutoIncrementalCompile: Incremental Flow enabled for current implementation run with guide file ($guideFile) as the reference checkpoint."
+        set_property INCREMENTAL_CHECKPOINT $guideFile [current_run]
     }
 }
 
@@ -294,10 +299,11 @@ proc ::tclapp::xilinx::incrcompile::get_impl_runs_placed_or_routed { impl_runs }
   # Argument Usage:
   # Return Value:
 
-	set runs_placed_or_routed [ list $impl_runs ]
+	set runs_placed_or_routed ""
 	foreach run $impl_runs {
 			if {[::tclapp::xilinx::incrcompile::is_run_routed $run] || [::tclapp::xilinx::incrcompile::is_run_placed_but_not_routed $run] } { 
 				lappend runs_placed_or_routed $run
+                #puts "get_impl_runs_placed_or_routed: found placed and routed run = $run"
 			}
 	}
 	return $runs_placed_or_routed
@@ -337,7 +343,7 @@ proc ::tclapp::xilinx::incrcompile::is_run_routed { run } {
   # Summary :
   # Argument Usage:
   # Return Value:
-
+            #puts "incrcompile::is_run_routed: $run [ get_property STATUS $run ]"
 			return [ string match "route_design Complete*" [ get_property STATUS $run ]  ]
 }
 
@@ -345,7 +351,7 @@ proc ::tclapp::xilinx::incrcompile::is_run_placed_but_not_routed { run } {
   # Summary :
   # Argument Usage:
   # Return Value:
-
+            #puts "incrcompile::is_run_placed_but_not_routed: $run [ get_property STATUS $run ]"
 			return [ string match "place_design Complete*" [ get_property STATUS $run ]  ]
 }
 
